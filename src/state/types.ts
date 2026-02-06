@@ -20,6 +20,8 @@ export type EvidenceType =
   | "diff"
   | "link";
 
+export type EvidenceSource = "user" | "auto" | "ai";
+
 export interface EvidenceItem {
   id: string;
   type: EvidenceType;
@@ -28,6 +30,7 @@ export interface EvidenceItem {
   snippet?: string;      // optional short context
   whyIncluded: string;   // “포함 이유” (중요)
   createdAt: string;     // ISO string
+  source?: EvidenceSource;
 }
 
 export type ProvocationType =

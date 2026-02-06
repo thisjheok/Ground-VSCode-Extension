@@ -13,6 +13,11 @@ import { OutlineViewProvider } from "./views/outlineView";
 import { EvidenceViewProvider } from "./views/evidenceView";
 import { ProvocationViewProvider } from "./views/provocationView";
 
+import { addEvidenceFromSelection } from "./commands/addEvidenceFromSelection";
+import { addEvidenceFromActiveFile } from "./commands/addEvidenceFromActiveFile";
+import { addDiagnosticsEvidence } from "./commands/addDiagnosticsEvidence";
+import { ingestTestLog } from "./commands/ingestTestLog";
+
 export function activate(context: vscode.ExtensionContext) {
   const store = new SessionStore(context);
   
@@ -58,6 +63,30 @@ export function activate(context: vscode.ExtensionContext) {
       { webviewOptions: { retainContextWhenHidden: true } }
     )
   );
+
+  context.subscriptions.push(
+  vscode.commands.registerCommand("ground.addEvidenceFromSelection", async () => {
+    await addEvidenceFromSelection(store);
+  })
+);
+
+context.subscriptions.push(
+  vscode.commands.registerCommand("ground.addEvidenceFromActiveFile", async () => {
+    await addEvidenceFromActiveFile(store);
+  })
+);
+
+context.subscriptions.push(
+  vscode.commands.registerCommand("ground.addDiagnosticsEvidence", async () => {
+    await addDiagnosticsEvidence(store);
+  })
+);
+
+context.subscriptions.push(
+  vscode.commands.registerCommand("ground.ingestTestLog", async () => {
+    await ingestTestLog(store);
+  })
+);
 }
 
 // This method is called when your extension is deactivated

@@ -2,6 +2,13 @@
 
 import * as vscode from "vscode";
 import { SessionStore } from "../state/sessionStore";
+import { EvidenceItem } from "../state/types";
+
+type IncomingMessage =
+  | { type: "ready" }
+  | { type: "removeEvidence"; id: string }
+  | { type: "editWhy"; id: string }
+  | { type: "runCommand"; command: string };
 
 export class EvidenceViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "tft.evidenceView";
@@ -14,9 +21,43 @@ export class EvidenceViewProvider implements vscode.WebviewViewProvider {
 
   resolveWebviewView(view: vscode.WebviewView) {
     this.view = view;
-
     view.webview.options = { enableScripts: true };
     view.webview.html = this.renderHtml();
+
+    view.webview.onDidReceiveMessage(async (msg: IncomingMessage) => {
+      if (msg.type === "ready") {
+        this.push();
+        return;
+      }
+
+      if (msg.type === "removeEvidence") {
+        await this.store.removeEvidence(msg.id);
+        return;
+      }
+
+      if (msg.type === "editWhy") {
+        const s = this.store.get() ?? (await this.store.load());
+        const item = s?.evidence?.find((e) => e.id === msg.id);
+        if (!item) return;
+
+        const why = await vscode.window.showInputBox({
+          title: "Edit whyIncluded",
+          value: item.whyIncluded ?? "",
+          prompt: "Explain why this evidence matters (1 line is enough).",
+          ignoreFocusOut: true,
+        });
+
+        if (typeof why === "string") {
+          await this.store.updateEvidenceWhy(msg.id, why);
+        }
+        return;
+      }
+
+      if (msg.type === "runCommand") {
+        await vscode.commands.executeCommand(msg.command);
+        return;
+      }
+    });
 
     this.context.subscriptions.push(
       this.store.onDidChangeSession(() => this.push())
@@ -28,7 +69,10 @@ export class EvidenceViewProvider implements vscode.WebviewViewProvider {
   private push() {
     if (!this.view) return;
     const session = this.store.get();
-    this.view.webview.postMessage({ type: "session", payload: session });
+    this.view.webview.postMessage({
+      type: "session",
+      payload: session,
+    });
   }
 
   private renderHtml(): string {
@@ -42,25 +86,120 @@ export class EvidenceViewProvider implements vscode.WebviewViewProvider {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 12px; }
+    .top { display:flex; justify-content: space-between; align-items:center; gap: 8px; }
     .muted { opacity: 0.75; font-size: 12px; }
-    pre { white-space: pre-wrap; word-break: break-word; background: rgba(0,0,0,0.04); padding: 8px; border-radius: 8px; }
+    .btns { display:flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 12px; }
+    button { font-size: 12px; padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.12); background: rgba(0,0,0,0.04); cursor: pointer; }
+    button:hover { background: rgba(0,0,0,0.07); }
+    .list { display:flex; flex-direction: column; gap: 10px; }
+    .card { border: 1px solid rgba(0,0,0,0.12); border-radius: 12px; padding: 10px; }
+    .row { display:flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+    .title { font-weight: 600; }
+    .meta { font-size: 12px; opacity: 0.75; margin-top: 4px; }
+    .why { margin-top: 8px; font-size: 12px; }
+    .actions { display:flex; gap: 6px; }
+    pre { white-space: pre-wrap; word-break: break-word; background: rgba(0,0,0,0.04); padding: 8px; border-radius: 8px; margin-top: 8px; font-size: 12px; }
   </style>
 </head>
 <body>
-  <div><strong>Evidence</strong></div>
-  <div class="muted">Day 1: view only. Day 2: add/edit/remove evidence.</div>
-  <pre id="box" class="muted">No session.</pre>
+  <div class="top">
+    <div>
+      <div><strong>Evidence</strong></div>
+      <div class="muted">Add evidence from selection/diagnostics/logs.</div>
+    </div>
+    <div class="muted" id="count">0</div>
+  </div>
+
+  <div class="btns">
+    <button data-cmd="ground.addEvidenceFromSelection">Add from Selection</button>
+    <button data-cmd="ground.addEvidenceFromActiveFile">Add Active File</button>
+    <button data-cmd="ground.addDiagnosticsEvidence">Add Diagnostics</button>
+    <button data-cmd="ground.ingestTestLog">Ingest Test Log</button>
+  </div>
+
+  <div id="empty" class="muted" style="display:none;">
+    No evidence yet. Add from selection or diagnostics.
+  </div>
+
+  <div id="list" class="list"></div>
 
   <script nonce="${nonce}">
-    const box = document.getElementById('box');
+    const vscode = acquireVsCodeApi();
+
+    const listEl = document.getElementById('list');
+    const emptyEl = document.getElementById('empty');
+    const countEl = document.getElementById('count');
+
+    document.querySelectorAll('button[data-cmd]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        vscode.postMessage({ type: 'runCommand', command: btn.getAttribute('data-cmd') });
+      });
+    });
+
+    function render(items) {
+      listEl.innerHTML = '';
+      const n = items.length;
+      countEl.textContent = n + ' items';
+
+      emptyEl.style.display = n === 0 ? 'block' : 'none';
+      if (n === 0) return;
+
+      for (const it of items) {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const header = document.createElement('div');
+        header.className = 'row';
+
+        const left = document.createElement('div');
+        left.innerHTML = '<div class="title"></div><div class="meta"></div>';
+
+        left.querySelector('.title').textContent = it.title || '(no title)';
+        left.querySelector('.meta').textContent = (it.type || 'evidence') + ' • ' + (it.ref || '');
+
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+
+        const editBtn = document.createElement('button');
+        editBtn.textContent = 'Edit why';
+        editBtn.addEventListener('click', () => vscode.postMessage({ type: 'editWhy', id: it.id }));
+
+        const rmBtn = document.createElement('button');
+        rmBtn.textContent = 'Remove';
+        rmBtn.addEventListener('click', () => vscode.postMessage({ type: 'removeEvidence', id: it.id }));
+
+        actions.appendChild(editBtn);
+        actions.appendChild(rmBtn);
+
+        header.appendChild(left);
+        header.appendChild(actions);
+
+        const why = document.createElement('div');
+        why.className = 'why';
+        why.textContent = 'Why: ' + (it.whyIncluded || '(empty)');
+
+        card.appendChild(header);
+        card.appendChild(why);
+
+        if (it.snippet) {
+          const pre = document.createElement('pre');
+          pre.textContent = it.snippet;
+          card.appendChild(pre);
+        }
+
+        listEl.appendChild(card);
+      }
+    }
+
     window.addEventListener('message', (e) => {
       const msg = e.data;
       if (msg.type !== 'session') return;
       const s = msg.payload;
-      if (!s) { box.textContent = 'No session.'; return; }
-      const count = (s.evidence || []).length;
-      box.textContent = 'Evidence items: ' + count;
+      const items = (s && s.evidence) ? s.evidence : [];
+      render(items);
     });
+
+    vscode.postMessage({ type: 'ready' });
   </script>
 </body>
 </html>`;
