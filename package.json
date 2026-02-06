@@ -24,6 +24,22 @@
       {
         "command": "ground.clearSession",
         "title": "Tool for Thought: Clear Session"
+      },
+      {
+        "command": "ground.addEvidenceFromSelection",
+        "title": "Tool for Thought: Evidence - Add from Selection"
+      },
+      {
+        "command": "ground.addEvidenceFromActiveFile",
+        "title": "Tool for Thought: Evidence - Add Active File"
+      },
+      {
+        "command": "ground.addDiagnosticsEvidence",
+        "title": "Tool for Thought: Evidence - Add Diagnostics"
+      },
+      {
+        "command": "ground.ingestTestLog",
+        "title": "Tool for Thought: Evidence - Ingest Test Log"
       }
     ],
     "viewsContainers": {
