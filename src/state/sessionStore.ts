@@ -3,6 +3,7 @@
 import * as vscode from "vscode";
 import { computeGate } from "./gate";
 import { Mode, Session } from "./types";
+import { EvidenceItem } from "./types";
 
 const SESSION_KEY = "tft.session.v1";
 
@@ -157,4 +158,44 @@ export class SessionStore {
     this.session = null;
     this.emit();
   }
+
+  /**
+   * Evidence 추가 메서드
+   */
+  async addEvidence(items: EvidenceItem | EvidenceItem[]): Promise<void> {
+    const current = this.session ?? (await this.load());
+    if (!current) {
+      await this.create("standard");
+    }
+    const s = this.session!;
+    const newItems = Array.isArray(items) ? items : [items];
+
+    await this.update({
+      evidence: [...(s.evidence ?? []), ...newItems],
+    } as any);
+  }
+
+  /**
+   * Evidence 삭제 메서드
+   */
+    async removeEvidence(evidenceId: string): Promise<void> {
+        const s = this.session ?? (await this.load());
+        if (!s) return;
+
+        const next = (s.evidence ?? []).filter((e) => e.id !== evidenceId);
+        await this.update({ evidence: next } as any);
+    }
+
+  /**
+   * Evidence 업데이트 메서드
+   */
+    async updateEvidenceWhy(evidenceId: string, whyIncluded: string): Promise<void> {
+        const s = this.session ?? (await this.load());
+        if (!s) return;
+
+        const next = (s.evidence ?? []).map((e) =>
+            e.id === evidenceId ? { ...e, whyIncluded } : e
+        );
+        await this.update({ evidence: next } as any);
+    }
 }
