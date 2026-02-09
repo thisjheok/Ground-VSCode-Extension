@@ -1,6 +1,12 @@
 // src/state/types.ts
 
-export type Mode = "learning" | "standard" | "fast";
+export type Mode =
+  | "bugfix"
+  | "feature"
+  | "refactor"
+  | "standard"
+  | "learning"
+  | "fast";
 
 export interface Outline {
   symptom?: string;            // 버그 모드일 때(선택)
@@ -33,38 +39,39 @@ export interface EvidenceItem {
   source?: EvidenceSource;
 }
 
-export type ProvocationType =
+export type ProvocationKind =
   | "Counterexample"
-  | "HiddenAssumption"
-  | "Tradeoff"
+  | "Hidden Assumption"
+  | "Trade-off"
   | "Security"
   | "Performance"
-  | "TestGap";
+  | "Test Gap";
 
 export type Severity = "low" | "med" | "high";
 
 export interface ProvocationCard {
   id: string;
-  type: ProvocationType;
-  severity: Severity;
-  prompt: string;
-  basedOnEvidenceIds: string[];
-  suggestedChecks: string[];
+  kind: ProvocationKind;
+  title: string;
+  body: string;
+  severity?: Severity;
+  basedOnEvidenceIds?: string[];
   createdAt: string;
 }
 
-export type DecisionStatus = "accept" | "reject" | "hold";
+export type ProvocationDecision = "accept" | "hold" | "reject";
 
-export interface Decision {
-  cardId: string;
-  status: DecisionStatus;
-  reason: string;
-  updatedAt: string;
+export interface ProvocationResponse {
+  decision: ProvocationDecision;
+  rationale: string;
+  respondedAt: string;
 }
 
 export interface GateStatus {
   outlineReady: boolean;
+  provocationReady: boolean;
   provocationRespondedCount: number;
+  provocationTotalCount: number;
   canGeneratePatch: boolean;
   canExport: boolean;
 }
@@ -82,6 +89,7 @@ export interface SessionContext {
 
 export interface Session {
   id: string;
+  title: string;
   mode: Mode;
 
   createdAt: string;
@@ -92,7 +100,28 @@ export interface Session {
   outline: Outline;
   evidence: EvidenceItem[];
   provocations: ProvocationCard[];
-  decisions: Record<string, Decision>; // key = cardId
+  provocationResponses: Record<string, ProvocationResponse>; // key = cardId
 
   gate: GateStatus;
+  archived?: boolean;
+}
+
+export interface SessionMeta {
+  id: string;
+  title: string;
+  mode: Mode;
+  createdAt: string;
+  updatedAt: string;
+  archived?: boolean;
+  evidenceCount: number;
+  provocationTotal: number;
+  provocationResponded: number;
+  outlineReady: boolean;
+  provocationReady: boolean;
+}
+
+export interface SessionStoreState {
+  activeSessionId: string | null;
+  sessionsById: Record<string, Session>;
+  sessionOrder: string[];
 }
