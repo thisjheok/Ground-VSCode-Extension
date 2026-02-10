@@ -12,7 +12,10 @@ import { addEvidenceFromSelection } from "./commands/evidence/addEvidenceFromSel
 import { addEvidenceFromActiveFile } from "./commands/evidence/addEvidenceFromActiveFile";
 import { addDiagnosticsEvidence } from "./commands/evidence/addDiagnosticsEvidence";
 import { ingestTestLog } from "./commands/evidence/ingestTestLog";
+import { buildEvidencePack } from "./commands/evidence/buildEvidencePack";
+import { generateEvidenceInsightsAI } from "./commands/evidence/generateEvidenceInsightsAI";
 import { generateProvocationsMock } from "./commands/provocation/generateProvocationsMock";
+import { generateProvocationsAI } from "./commands/provocation/generateProvocationsAI";
 import { OutlineViewProvider } from "./views/outlineView";
 import { EvidenceViewProvider } from "./views/evidenceView";
 import { ProvocationViewProvider } from "./views/provocationView";
@@ -95,8 +98,26 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand("ground.buildEvidencePack", async () => {
+      await buildEvidencePack(store);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("ground.generateEvidenceInsightsAI", async () => {
+      await generateEvidenceInsightsAI(store);
+    })
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand("ground.generateProvocationsMock", async () => {
       await generateProvocationsMock(store);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("ground.generateProvocationsAI", async () => {
+      await generateProvocationsAI(store);
     })
   );
 

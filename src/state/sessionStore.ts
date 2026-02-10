@@ -2,6 +2,9 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { computeGate } from "./gate";
 import {
+  EvidenceInsightCard,
+  EvidenceSuggestion,
+  EvidenceSuggestionAction,
   Mode,
   ProvocationCard,
   ProvocationDecision,
@@ -136,6 +139,55 @@ function normalizeResponses(raw: any): Record<string, ProvocationResponse> {
   return out;
 }
 
+function isInsightKind(input: unknown): input is EvidenceInsightCard["kind"] {
+  return (
+    input === "Implementation" ||
+    input === "Risk" ||
+    input === "Test" ||
+    input === "Performance" ||
+    input === "Security" ||
+    input === "Search"
+  );
+}
+
+function isSuggestionAction(input: unknown): input is EvidenceSuggestionAction {
+  return (
+    input === "addActiveFile" ||
+    input === "addSelection" ||
+    input === "addDiagnostics" ||
+    input === "ingestTestLog"
+  );
+}
+
+function normalizeEvidenceInsights(raw: any): EvidenceInsightCard[] {
+  const items: any[] = Array.isArray(raw?.evidenceInsights) ? raw.evidenceInsights : [];
+  return items
+    .filter((item) => typeof item?.id === "string")
+    .map((item) => ({
+      id: item.id,
+      kind: isInsightKind(item.kind) ? item.kind : "Implementation",
+      title: typeof item.title === "string" ? item.title : "Insight",
+      body: typeof item.body === "string" ? item.body : "",
+      queries: Array.isArray(item.queries)
+        ? item.queries.filter((q: unknown): q is string => typeof q === "string")
+        : undefined,
+      createdAt: typeof item.createdAt === "string" ? item.createdAt : nowIso(),
+    }));
+}
+
+function normalizeEvidenceSuggestions(raw: any): EvidenceSuggestion[] {
+  const items: any[] = Array.isArray(raw?.evidenceSuggestions) ? raw.evidenceSuggestions : [];
+  return items
+    .filter((item) => typeof item?.id === "string")
+    .map((item) => ({
+      id: item.id,
+      action: isSuggestionAction(item.action) ? item.action : "addDiagnostics",
+      title: typeof item.title === "string" ? item.title : "Suggested evidence",
+      reason: typeof item.reason === "string" ? item.reason : "",
+      createdAt: typeof item.createdAt === "string" ? item.createdAt : nowIso(),
+    }));
+}
+
 function defaultTitleForMode(mode: Mode, activeFile?: string): string {
   const fileName = activeFile ? path.basename(activeFile) : "";
   if (mode === "bugfix") return fileName ? `Bugfix: ${fileName}` : "Bugfix Session";
@@ -180,6 +232,8 @@ function normalizeSession(raw: any): Session {
         typeof raw?.outline?.verificationPlan === "string" ? raw.outline.verificationPlan : "",
     },
     evidence: Array.isArray(raw?.evidence) ? (raw.evidence as EvidenceItem[]) : [],
+    evidenceInsights: normalizeEvidenceInsights(raw),
+    evidenceSuggestions: normalizeEvidenceSuggestions(raw),
     provocations: normalizeProvocations(raw),
     provocationResponses: normalizeResponses(raw),
     gate: {
@@ -396,6 +450,8 @@ export class SessionStore {
         strategy: "",
       },
       evidence: [],
+      evidenceInsights: [],
+      evidenceSuggestions: [],
       provocations: [],
       provocationResponses: {},
       gate: {
@@ -532,6 +588,22 @@ export class SessionStore {
       provocations: cards,
       provocationResponses: nextResponses,
     });
+  }
+
+  async setEvidenceInsights(
+    insights: EvidenceInsightCard[],
+    suggestions: EvidenceSuggestion[]
+  ): Promise<Session> {
+    return this.updateActiveSession({
+      evidenceInsights: insights,
+      evidenceSuggestions: suggestions,
+    });
+  }
+
+  async removeEvidenceSuggestion(suggestionId: string): Promise<Session> {
+    const current = this.activeSession ?? (await this.create("standard"));
+    const next = (current.evidenceSuggestions ?? []).filter((item) => item.id !== suggestionId);
+    return this.updateActiveSession({ evidenceSuggestions: next });
   }
 
   async upsertProvocationResponse(

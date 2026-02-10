@@ -29,7 +29,7 @@ export class ProvocationViewProvider implements vscode.WebviewViewProvider {
       }
 
       if (msg.type === "generateProvocations") {
-        await vscode.commands.executeCommand("ground.generateProvocationsMock");
+        await vscode.commands.executeCommand("ground.generateProvocationsAI");
         return;
       }
 

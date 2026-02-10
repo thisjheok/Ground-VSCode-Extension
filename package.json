@@ -62,8 +62,20 @@
         "title": "Tool for Thought: Evidence - Ingest Test Log"
       },
       {
+        "command": "ground.buildEvidencePack",
+        "title": "Tool for Thought: Evidence - Build Evidence Pack"
+      },
+      {
+        "command": "ground.generateEvidenceInsightsAI",
+        "title": "Tool for Thought: Evidence - Generate AI Insights"
+      },
+      {
         "command": "ground.generateProvocationsMock",
         "title": "Tool for Thought: Provocation - Generate Mock Cards"
+      },
+      {
+        "command": "ground.generateProvocationsAI",
+        "title": "Tool for Thought: Provocation - Generate AI Cards (Ollama)"
       }
     ],
     "viewsContainers": {
@@ -98,7 +110,22 @@
           "type": "webview"
         }
       ]
-    }
+    },
+    "configuration": {
+        "title": "Ground",
+        "properties": {
+          "ground.ollama.baseUrl": {
+            "type": "string",
+            "default": "http://localhost:11434",
+            "description": "Base URL for Ollama server"
+          },
+          "ground.ollama.model": {
+            "type": "string",
+            "default": "qwen2.5-coder:3b",
+            "description": "Ollama model name"
+          }
+        }
+      }    
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

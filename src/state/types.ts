@@ -24,7 +24,8 @@ export type EvidenceType =
   | "diagnostic"
   | "testLog"
   | "diff"
-  | "link";
+  | "link"
+  | "insight";
 
 export type EvidenceSource = "user" | "auto" | "ai";
 
@@ -37,6 +38,37 @@ export interface EvidenceItem {
   whyIncluded: string;   // “포함 이유” (중요)
   createdAt: string;     // ISO string
   source?: EvidenceSource;
+}
+
+export type InsightKind =
+  | "Implementation"
+  | "Risk"
+  | "Test"
+  | "Performance"
+  | "Security"
+  | "Search";
+
+export type EvidenceSuggestionAction =
+  | "addActiveFile"
+  | "addSelection"
+  | "addDiagnostics"
+  | "ingestTestLog";
+
+export interface EvidenceInsightCard {
+  id: string;
+  kind: InsightKind;
+  title: string;
+  body: string;
+  queries?: string[];
+  createdAt: string;
+}
+
+export interface EvidenceSuggestion {
+  id: string;
+  action: EvidenceSuggestionAction;
+  title: string;
+  reason: string;
+  createdAt: string;
 }
 
 export type ProvocationKind =
@@ -99,6 +131,8 @@ export interface Session {
 
   outline: Outline;
   evidence: EvidenceItem[];
+  evidenceInsights: EvidenceInsightCard[];
+  evidenceSuggestions: EvidenceSuggestion[];
   provocations: ProvocationCard[];
   provocationResponses: Record<string, ProvocationResponse>; // key = cardId
 
