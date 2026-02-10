@@ -12,6 +12,8 @@ import { addEvidenceFromSelection } from "./commands/evidence/addEvidenceFromSel
 import { addEvidenceFromActiveFile } from "./commands/evidence/addEvidenceFromActiveFile";
 import { addDiagnosticsEvidence } from "./commands/evidence/addDiagnosticsEvidence";
 import { ingestTestLog } from "./commands/evidence/ingestTestLog";
+import { buildEvidencePack } from "./commands/evidence/buildEvidencePack";
+import { generateEvidenceInsightsAI } from "./commands/evidence/generateEvidenceInsightsAI";
 import { generateProvocationsMock } from "./commands/provocation/generateProvocationsMock";
 import { generateProvocationsAI } from "./commands/provocation/generateProvocationsAI";
 import { OutlineViewProvider } from "./views/outlineView";
@@ -92,6 +94,18 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand("ground.ingestTestLog", async () => {
       await ingestTestLog(store);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("ground.buildEvidencePack", async () => {
+      await buildEvidencePack(store);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("ground.generateEvidenceInsightsAI", async () => {
+      await generateEvidenceInsightsAI(store);
     })
   );
 

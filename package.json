@@ -62,6 +62,14 @@
         "title": "Tool for Thought: Evidence - Ingest Test Log"
       },
       {
+        "command": "ground.buildEvidencePack",
+        "title": "Tool for Thought: Evidence - Build Evidence Pack"
+      },
+      {
+        "command": "ground.generateEvidenceInsightsAI",
+        "title": "Tool for Thought: Evidence - Generate AI Insights"
+      },
+      {
         "command": "ground.generateProvocationsMock",
         "title": "Tool for Thought: Provocation - Generate Mock Cards"
       },

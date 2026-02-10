@@ -1,14 +1,28 @@
-// src/views/evidenceView.ts
-
 import * as vscode from "vscode";
 import { SessionStore } from "../state/sessionStore";
-import { EvidenceItem } from "../state/types";
+import { EvidenceSuggestionAction } from "../state/types";
 
 type IncomingMessage =
   | { type: "ready" }
   | { type: "removeEvidence"; id: string }
   | { type: "editWhy"; id: string }
-  | { type: "runCommand"; command: string };
+  | { type: "runCommand"; command: string }
+  | { type: "applySuggestion"; id: string; action: EvidenceSuggestionAction };
+
+function commandForSuggestion(action: EvidenceSuggestionAction): string {
+  switch (action) {
+    case "addActiveFile":
+      return "ground.addEvidenceFromActiveFile";
+    case "addSelection":
+      return "ground.addEvidenceFromSelection";
+    case "addDiagnostics":
+      return "ground.addDiagnosticsEvidence";
+    case "ingestTestLog":
+      return "ground.ingestTestLog";
+    default:
+      return "ground.addDiagnosticsEvidence";
+  }
+}
 
 export class EvidenceViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "tft.evidenceView";
@@ -57,21 +71,23 @@ export class EvidenceViewProvider implements vscode.WebviewViewProvider {
         await vscode.commands.executeCommand(msg.command);
         return;
       }
+
+      if (msg.type === "applySuggestion") {
+        const command = commandForSuggestion(msg.action);
+        await vscode.commands.executeCommand(command);
+        await this.store.removeEvidenceSuggestion(msg.id);
+      }
     });
 
-    this.context.subscriptions.push(
-      this.store.onDidChangeSession(() => this.push())
-    );
-
+    this.context.subscriptions.push(this.store.onDidChangeSession(() => this.push()));
     this.push();
   }
 
   private push() {
     if (!this.view) return;
-    const session = this.store.get();
     this.view.webview.postMessage({
       type: "session",
-      payload: session,
+      payload: this.store.get(),
     });
   }
 
@@ -85,118 +101,144 @@ export class EvidenceViewProvider implements vscode.WebviewViewProvider {
         content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
-    body {
-        color: var(--vscode-foreground);
-        background: var(--vscode-sideBar-background);
-    }
+    body { color: var(--vscode-foreground); background: var(--vscode-sideBar-background); padding: 10px; }
+    .muted { color: var(--vscode-descriptionForeground); font-size: 12px; }
+    .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 14px; }
     button {
-        color: var(--vscode-button-foreground);
-        background: var(--vscode-button-background);
-        border: 1px solid var(--vscode-button-border, transparent);
-        padding: 6px 10px;
-        cursor: pointer;
+      color: var(--vscode-button-foreground);
+      background: var(--vscode-button-background);
+      border: 1px solid var(--vscode-button-border, transparent);
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
     }
-    button:hover {
-        background: var(--vscode-button-hoverBackground);
+    button.secondary {
+      color: var(--vscode-input-foreground);
+      background: var(--vscode-input-background);
+      border-color: var(--vscode-input-border, transparent);
     }
+    button:hover { background: var(--vscode-button-hoverBackground); }
+    .sectionTitle { margin: 12px 0 8px; font-size: 12px; color: var(--vscode-descriptionForeground); text-transform: uppercase; }
     .card {
-        background: var(--vscode-editorWidget-background);
-        border: 1px solid var(--vscode-editorWidget-border);
+      background: var(--vscode-editorWidget-background);
+      border: 1px solid var(--vscode-editorWidget-border);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 8px;
     }
+    .meta { font-size: 12px; color: var(--vscode-descriptionForeground); }
+    .title { font-weight: 600; margin-bottom: 4px; }
+    .why { margin-top: 8px; font-size: 12px; }
     pre {
-        background: var(--vscode-textBlockQuote-background, rgba(0,0,0,0.08));
-        border: 1px solid var(--vscode-editorWidget-border);
+      background: var(--vscode-textBlockQuote-background, rgba(0,0,0,0.08));
+      border: 1px solid var(--vscode-editorWidget-border);
+      border-radius: 6px;
+      padding: 8px;
+      font-size: 11px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 120px;
+      overflow: auto;
+      margin-top: 8px;
     }
-    .muted {
-        color: var(--vscode-descriptionForeground);
-        opacity: 1;
+    .chip {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      border: 1px solid var(--vscode-editorWidget-border);
+      margin-right: 6px;
     }
-    .btns {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;    
-        margin: 12px 0 14px;
-        }
+    .empty { color: var(--vscode-descriptionForeground); font-size: 12px; padding: 8px 0; }
   </style>
 </head>
 <body>
-  <div class="top">
+  <div class="row">
     <div>
-      <div><strong>Evidence</strong></div>
-      <div class="muted">Add evidence from selection/diagnostics/logs.</div>
+      <div><strong>Evidence Pack</strong></div>
+      <div class="muted">Raw evidence + AI insights for grounded implementation decisions.</div>
     </div>
-    <div class="muted" id="count">0</div>
+    <div id="count" class="muted">0 items</div>
   </div>
 
-  <div class="btns">
-    <button data-cmd="ground.addEvidenceFromSelection">Add from Selection</button>
-    <button data-cmd="ground.addEvidenceFromActiveFile">Add Active File</button>
-    <button data-cmd="ground.addDiagnosticsEvidence">Add Diagnostics</button>
-    <button data-cmd="ground.ingestTestLog">Ingest Test Log</button>
+  <div class="toolbar">
+    <button data-cmd="ground.buildEvidencePack">Build Evidence Pack</button>
+    <button data-cmd="ground.generateEvidenceInsightsAI">Generate AI Insights</button>
+    <button class="secondary" data-cmd="ground.addEvidenceFromSelection">Add Selection</button>
+    <button class="secondary" data-cmd="ground.addDiagnosticsEvidence">Add Diagnostics</button>
   </div>
 
-  <div id="empty" class="muted" style="display:none;">
-    No evidence yet. Add from selection or diagnostics.
-  </div>
+  <div class="sectionTitle">AI Insights</div>
+  <div id="insightsEmpty" class="empty">No insights yet. Click "Generate AI Insights".</div>
+  <div id="insights"></div>
 
-  <div id="list" class="list"></div>
+  <div class="sectionTitle">Suggested Raw Evidence</div>
+  <div id="suggestionsEmpty" class="empty">No suggested additions.</div>
+  <div id="suggestions"></div>
+
+  <div class="sectionTitle">Raw Evidence</div>
+  <div id="rawEmpty" class="empty">No evidence yet. Click "Build Evidence Pack".</div>
+  <div id="rawList"></div>
 
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
-
-    const listEl = document.getElementById('list');
-    const emptyEl = document.getElementById('empty');
+    const rawListEl = document.getElementById('rawList');
+    const rawEmptyEl = document.getElementById('rawEmpty');
+    const insightsEl = document.getElementById('insights');
+    const insightsEmptyEl = document.getElementById('insightsEmpty');
+    const suggestionsEl = document.getElementById('suggestions');
+    const suggestionsEmptyEl = document.getElementById('suggestionsEmpty');
     const countEl = document.getElementById('count');
 
-    document.querySelectorAll('button[data-cmd]').forEach(btn => {
+    document.querySelectorAll('button[data-cmd]').forEach((btn) => {
       btn.addEventListener('click', () => {
         vscode.postMessage({ type: 'runCommand', command: btn.getAttribute('data-cmd') });
       });
     });
 
-    function render(items) {
-      listEl.innerHTML = '';
-      const n = items.length;
-      countEl.textContent = n + ' items';
-
-      emptyEl.style.display = n === 0 ? 'block' : 'none';
-      if (n === 0) return;
-
+    function renderRaw(items) {
+      rawListEl.innerHTML = '';
+      rawEmptyEl.style.display = items.length === 0 ? 'block' : 'none';
       for (const it of items) {
         const card = document.createElement('div');
         card.className = 'card';
 
-        const header = document.createElement('div');
-        header.className = 'row';
+        const top = document.createElement('div');
+        top.className = 'row';
 
         const left = document.createElement('div');
         left.innerHTML = '<div class="title"></div><div class="meta"></div>';
-
         left.querySelector('.title').textContent = it.title || '(no title)';
         left.querySelector('.meta').textContent = (it.type || 'evidence') + ' • ' + (it.ref || '');
 
-        const actions = document.createElement('div');
-        actions.className = 'actions';
-
+        const right = document.createElement('div');
         const editBtn = document.createElement('button');
+        editBtn.className = 'secondary';
         editBtn.textContent = 'Edit why';
         editBtn.addEventListener('click', () => vscode.postMessage({ type: 'editWhy', id: it.id }));
 
         const rmBtn = document.createElement('button');
+        rmBtn.className = 'secondary';
         rmBtn.textContent = 'Remove';
         rmBtn.addEventListener('click', () => vscode.postMessage({ type: 'removeEvidence', id: it.id }));
+        right.appendChild(editBtn);
+        right.appendChild(rmBtn);
 
-        actions.appendChild(editBtn);
-        actions.appendChild(rmBtn);
+        top.appendChild(left);
+        top.appendChild(right);
+        card.appendChild(top);
 
-        header.appendChild(left);
-        header.appendChild(actions);
+        const chips = document.createElement('div');
+        const source = document.createElement('span');
+        source.className = 'chip';
+        source.textContent = 'source: ' + (it.source || 'user');
+        chips.appendChild(source);
+        card.appendChild(chips);
 
         const why = document.createElement('div');
         why.className = 'why';
         why.textContent = 'Why: ' + (it.whyIncluded || '(empty)');
-
-        card.appendChild(header);
         card.appendChild(why);
 
         if (it.snippet) {
@@ -205,16 +247,106 @@ export class EvidenceViewProvider implements vscode.WebviewViewProvider {
           card.appendChild(pre);
         }
 
-        listEl.appendChild(card);
+        rawListEl.appendChild(card);
+      }
+    }
+
+    function renderInsights(items) {
+      insightsEl.innerHTML = '';
+      insightsEmptyEl.style.display = items.length === 0 ? 'block' : 'none';
+      function insightBorderColor(kind) {
+        if (kind === 'Risk') return 'var(--vscode-editorError-foreground, #cc6666)';
+        if (kind === 'Security') return 'var(--vscode-editorWarning-foreground, #d7ba7d)';
+        if (kind === 'Test') return 'var(--vscode-terminal-ansiBlue, #569cd6)';
+        if (kind === 'Performance') return 'var(--vscode-terminal-ansiYellow, #dcdcaa)';
+        if (kind === 'Search') return 'var(--vscode-terminal-ansiCyan, #4ec9b0)';
+        return 'var(--vscode-terminal-ansiGreen, #6a9955)';
+      }
+      for (const it of items) {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const kindChip = document.createElement('span');
+        kindChip.className = 'chip';
+        kindChip.textContent = it.kind || 'Implementation';
+        kindChip.style.borderColor = insightBorderColor(it.kind || 'Implementation');
+        kindChip.style.marginRight = '8px';
+
+        const titleWrap = document.createElement('div');
+        titleWrap.className = 'row';
+        const left = document.createElement('div');
+        left.appendChild(kindChip);
+        const titleText = document.createElement('span');
+        titleText.textContent = it.title || 'Insight';
+        left.appendChild(titleText);
+        titleWrap.appendChild(left);
+        card.appendChild(titleWrap);
+
+        const body = document.createElement('div');
+        body.className = 'why';
+        body.textContent = it.body || '';
+        card.appendChild(body);
+
+        if (Array.isArray(it.queries) && it.queries.length > 0) {
+          const q = document.createElement('pre');
+          q.textContent = it.queries.join('\\n');
+          card.appendChild(q);
+        }
+
+        insightsEl.appendChild(card);
+      }
+    }
+
+    function actionLabel(action) {
+      if (action === 'addActiveFile') return 'Add Active File';
+      if (action === 'addSelection') return 'Add Selection';
+      if (action === 'addDiagnostics') return 'Add Diagnostics';
+      if (action === 'ingestTestLog') return 'Ingest Test Log';
+      return 'Add Diagnostics';
+    }
+
+    function renderSuggestions(items) {
+      suggestionsEl.innerHTML = '';
+      suggestionsEmptyEl.style.display = items.length === 0 ? 'block' : 'none';
+      for (const it of items) {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const top = document.createElement('div');
+        top.className = 'row';
+        const title = document.createElement('div');
+        title.className = 'title';
+        title.textContent = it.title || 'Suggested raw evidence';
+        top.appendChild(title);
+
+        const applyBtn = document.createElement('button');
+        applyBtn.textContent = actionLabel(it.action);
+        applyBtn.addEventListener('click', () => {
+          vscode.postMessage({ type: 'applySuggestion', id: it.id, action: it.action });
+        });
+        top.appendChild(applyBtn);
+
+        const reason = document.createElement('div');
+        reason.className = 'why';
+        reason.textContent = it.reason || '';
+
+        card.appendChild(top);
+        card.appendChild(reason);
+        suggestionsEl.appendChild(card);
       }
     }
 
     window.addEventListener('message', (e) => {
       const msg = e.data;
       if (msg.type !== 'session') return;
-      const s = msg.payload;
-      const items = (s && s.evidence) ? s.evidence : [];
-      render(items);
+      const s = msg.payload || {};
+      const evidence = Array.isArray(s.evidence) ? s.evidence : [];
+      const insights = Array.isArray(s.evidenceInsights) ? s.evidenceInsights : [];
+      const suggestions = Array.isArray(s.evidenceSuggestions) ? s.evidenceSuggestions : [];
+      countEl.textContent = evidence.length + ' raw items';
+      renderRaw(evidence);
+      renderInsights(insights);
+      renderSuggestions(suggestions);
     });
 
     vscode.postMessage({ type: 'ready' });
